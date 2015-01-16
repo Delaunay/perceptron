@@ -4,17 +4,15 @@ __author__ = 'Pierre Delaunay'
 import numpy as np
 import copy
 
-structure = {
-    "input": 401,
-    "hidden": [25],
-    "output": 10,
-}
-
-
-Option = {
+Options = {
     "stochastic": True,
     "size": 100,
 
+    "structure": {
+        "input": 400,
+        "hidden": [25],
+        "output": 10,
+    }
 }
 
 
@@ -57,11 +55,13 @@ def format_labels(y):
 
 class Perceptron:
 
-    def __init__(self, y, x, struct):
+    def __init__(self, y, x, option):
 
         # structure
-        self.structure = struct
+        self.structure = option['structure']
+        self.option = option
         self.size = self._generate_size()       # Matrix Size So people can see the NN structure
+                                                # [0] : rows [1] : cols [2]: cumulative size (to reshape the col)
 
         self.y = y      # labels
         self.x = x      # data
@@ -73,85 +73,120 @@ class Perceptron:
         # save result of each layer || needed for the gradient
         self.a = []     # save feature matrix of each layer [1 X]
         self.z = []     # a * params
-        self.g = []     # grad
 
         # save the last thing called prediction
         self.h = np.zeros(0)
 
         # generate params and size and allocate memory
         self.params = self._generate_params()   # initialize
-        self.g = copy.deepcopy(self.params)     # grad same size params
+        self.g = list()                         # temporary
+        self.grad = copy.deepcopy(self.params)  # grad
         self._allocate_memory()                 # allocate h, z, and a
 
-    def cost_function(self, set=None, l=0):
-        """ if set is specified use set"""
+        self.state = 0
 
-        if set is None:
-            x = self.x
-            y = self.y
+    def theta(self, params, k):
+        """ reshape params into the equivalent matrix"""
+
+        if k == 0:
+            return (params[0:self.size[0][2]]).reshape(self.size[0][0:2])
         else:
-            x = set[0]
-            y = set[1]
+            return (params[self.size[k - 1][2]:self.size[k][2]]).reshape(self.size[k][0:2])
 
-        theta = self.params
+    def _forward_propagation(self, params):
         end = self.end() - 1
-        reg = 0
 
-        # first layer
-        self.a[0][:, 1:] = x
-        self.z[0] = np.dot(self.a[0], np.transpose(theta[0]))
+        self.a[0][:, 1:] = self.x
+        self.z[0] = np.dot(self.a[0], np.transpose(self.theta(params, 0)))
 
         for i in range(0, self.hidden_size() - 1):
-            # self.a[i]
-            print("here")
-            pass
+
+            self.a[i + 1][:, 1:] = sigmoid(self.z[i])
+            self.z[i + 1] = np.dot(self.a[i + 1], np.transpose(self.theta(params, i + 1)))
 
         self.a[end][:, 1:] = sigmoid(self.z[end - 1])
-        self.z[end] = np.dot(self.a[end], np.transpose(theta[end]))
+        self.z[end] = np.dot(self.a[end], np.transpose(self.theta(params, end)))
 
         self.h = sigmoid(self.z[end])
 
+        self.state = 1
+
+    def cost_function(self, params, l=1.0):
+        """ if set is specified use set"""
+
+        # always compute the forward prop
+        self._forward_propagation(params)
+        reg = 0
+
         # compute reg
         if l != 0:
-            i = 0
-            for el in self.params:
-                reg += np.sum(el[:, 2:self.size[i][1]] ** 2)
-                i += 1
+            for i in range(0, self.end()):
+                reg += np.sum(self.theta(params, i)[:, 1:] ** 2)
 
             reg = reg * l / (2.0 * self.train_size())
 
-        j = - (np.sum(np.log(self.h) * y) + np.sum(np.log(1.0 - self.h) * (1.0 - y))) / self.train_size()
+        j = - (np.sum(np.log(self.h) * self.y) + np.sum(np.log(1.0 - self.h) * (1.0 - self.y))) / self.x.shape[0]
 
         return j + reg
 
-    def gradient(self, set=None, l=0):
+    def gradient(self, params, l=1.0):
 
-        if set is None:
-            y = self.y
-        else:
-            y = set[1]
+        # forward prop must be done to compute the gradient
+        if self.state == 0:
+            self._forward_propagation(params)
 
-        theta = self.params
         end = self.end() - 1
-        self.g[end] = self.h - y                                                        # (5000x10)
+        self.g[end] = self.h - self.y
 
-        for i in range(1, end + 1):
-            self.g[end - i] = self.g[end - i + 1].dot(theta[end - i + 1])               # (5000x10 10x26)
-            self.g[end - i] = self.g[end - i][:, 1:] * sigmoid_grad(self.z[end - i])    # (5000x25 .* 5000x25)
+        sig3 = self.h - self.y
+        sig2 = sig3.dot(self.theta(params, 1))[:, 1:] * sigmoid_grad(self.z[0])
 
-        for i in range(0, end + 1):
-            self.g[i] = np.transpose(self.g[i]).dot(self.a[i])                          # (5000x25 * 5000x401)
+        if l < 0:
+            self.grad[0:self.size[0][2]] = (np.transpose(sig2).dot(self.a[0])).reshape((self.size[0][2],))
+            self.grad[self.size[0][2]:self.size[1][2]] = (np.transpose(sig3).dot(self.a[1])).reshape((self.size[1][0] * self.size[1][1],))
+            self.state = 0
+            self.grad /= self.x.shape[0]
+            return self.grad
 
-        # regularization
-        if l != 0:
-            for i in range(0, end):
-                # only copy the first Columns
-                # might be better than trying to 'delete' first column
-                temp = np.zeros_like(self.params[i])
-                temp[:, 0] = self.params[i][:, 0]
-                self.g[i] += l * (self.params[i] - temp)
+        else:
+            temp = np.zeros_like(self.theta(params, 0))
+            temp[:, 1:] = self.theta(params, 0)[:, 1:] * l
+            self.grad[0:self.size[0][2]] = (np.transpose(sig2).dot(self.a[0]) + temp).reshape((self.size[0][2],))
+            temp = np.zeros_like(self.theta(params, 1))
+            temp[:, 1:] = self.theta(params, 1)[:, 1:] * l
+            self.grad[self.size[0][2]:self.size[1][2]] = (np.transpose(sig3).dot(self.a[1]) + temp).reshape((self.size[1][0] * self.size[1][1],))
 
-        return self.g
+            self.state = 0
+            self.grad /= self.x.shape[0]
+            return self.grad
+
+        # self.grad[0:self.size[0][2]] = (np.transpose(sig2).dot(self.a[0])).reshape((self.size[0][2],))
+        #
+        # temp = np.zeros_like(self.theta(params, 1))
+        # if l != 0:
+        #     temp[:, 1:] = self.theta(params, 1)[:, 1:] * l
+        #
+        # self.grad[self.size[0][2]:self.size[1][2]] = (np.transpose(sig3).dot(self.a[1])).reshape((self.size[1][0] * self.size[1][1],))
+
+        # self.set_theta(self.grad, np.transpose(sig2).dot(self.a[0]), 0)
+        # self.set_theta(self.grad, np.transpose(sig3).dot(self.a[1]), 1)
+
+        # for i in range(1, end + 1):
+        #     self.g[end - i] = self.g[end - i + 1].dot(self.theta(params, end - i + 1))  # (5000x10 10x26)
+        #     self.g[end - i] = self.g[end - i][:, 1:] * sigmoid_grad(self.z[end - i])    # (5000x25 .* 5000x25)
+        #
+        # for i in range(0, end + 1):
+        #     self.set_theta(self.grad, np.transpose(self.g[i]).dot(self.a[i]), i)
+
+        # # regularization
+        # if l != 0:
+        #     for i in range(0, end):
+        #         # only copy the first Columns
+        #         # might be better than trying to 'delete' first column
+        #         temp = np.zeros_like(self.params[i])
+        #         temp[:, 0] = self.params[i][:, 0]
+        #         self.g[i] += l * (self.params[i] - temp)
+
 
     def predict(self, x):
 
@@ -199,8 +234,21 @@ class Perceptron:
             print(new, new-old)
             old = new
 
-    def numerical_gradient(self):
-        pass
+    def numerical_gradient(self, params, l=0, e=1e-4):
+
+        grad = np.zeros_like(params)
+        pertub = np.zeros_like(params)
+
+        for i in range(0, len(params)):
+            pertub[i] = e
+
+            loss1 = self.cost_function(params - pertub, l)
+            loss2 = self.cost_function(params + pertub, l)
+
+            grad[i] = (loss2 - loss1) / (2.0 * e)
+            pertub[i] = 0
+
+        return grad
 
     def end(self):
         return self.hidden_size() + 1
@@ -221,10 +269,10 @@ class Perceptron:
         return self.hidden(self.hidden_size() - 1)
 
     def train_size(self):
-        return self.x.shape[0]
+        if self.option['stochastic'] is True:
+            return self.option['size']
 
-    def theta(self, k):
-        return self.params[k]
+        return self.x.shape[0]
 
     def _generate_size(self):
         """ Generate the size of each set of params as a numpy shape tuple"""
@@ -246,30 +294,33 @@ class Perceptron:
 
         self.a.append(np.ones((self.train_size(), self.input() + 1)))  # 5000x401
         self.z.append(np.ones((self.train_size(), self.hidden(0))))    # 5000x25
+        self.g = [np.zeros((1, 1))]
 
         for i in range(0, self.hidden_size() - 1):
             self.a.append(np.ones((self.train_size(), self.hidden(i) + 1)))    # Skipped
             self.z.append(np.ones((self.train_size(), self.hidden(i + 1))))
+            self.g.append(np.zeros((1, 1)))
 
+        self.g.append(np.zeros((1, 1)))
         self.a.append(np.ones((self.train_size(), self.last_hidden() + 1)))    # 5000x26
         self.z.append(np.ones((self.train_size(), self.output())))             # 5000x10
 
     def _generate_params(self):
         """allocate memory for params and initialize them with random numbers"""
-        params = list()
 
-        for i in self.size:
-            params.append(np.random.uniform(0, 1, i))
+        si = 0
 
-        return params
+        for i in range(0, len(self.size)):
+            si += self.size[i][0] * self.size[i][1]
+            self.size[i] += (si, )
+
+        return np.random.uniform(0, 1, si)
 
 
 if __name__ == "__main__":
 
     y = np.array([0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3])
     y = format_labels(y)
-
-    print(y)
 
     x = np.array([
         [1, 20, 30, 40],
@@ -286,9 +337,14 @@ if __name__ == "__main__":
         [1, 20, 30, 40]
     ])
 
-    a = Perceptron(y, x, structure)
+    a = Perceptron(y, x, Options)
 
     print(a.size)
+    print(a.params)
+    # print(a.theta(0))
+    print(a.theta(0).shape)
+    # print(a.theta(1))
+    print(a.theta(1).shape)
 
 
     # print(a.a[0].shape)
