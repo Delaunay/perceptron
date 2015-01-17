@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 __author__ = 'Pierre Delaunay'
 
+import scipy.optimize as solver
 import numpy as np
 import copy
 
@@ -14,6 +15,18 @@ Options = {
         "output": 10,
     }
 }
+
+
+def hns(n):
+    """ HNS function : Handle Numpy Shit function """
+
+    if len(n.shape) != 1:
+        if n.shape[0] != 1:
+            n = np.transpose(n)
+
+        return n[0]
+
+    return n
 
 
 def sigmoid(x):
@@ -31,8 +44,14 @@ def add_bias(x):
     return xp
 
 
-# def softmax_grad(x):
-#     return softmax(x)
+def binarize(h):
+    """ max => 1 everything else = 0 """
+    return format_labels(predict_to_label(h))
+
+
+def predict_to_label(h, mn=0):
+    """Re construct a labels"""
+    return np.argmax(h, axis=1) + mn
 
 
 def sigmoid_grad(x):
@@ -92,24 +111,6 @@ class Perceptron:
             return (params[0:self.size[0][2]]).reshape(self.size[0][0:2])
         else:
             return (params[self.size[k - 1][2]:self.size[k][2]]).reshape(self.size[k][0:2])
-
-    def _forward_propagation(self, params):
-        end = self.end() - 1
-
-        self.a[0][:, 1:] = self.x
-        self.z[0] = np.dot(self.a[0], np.transpose(self.theta(params, 0)))
-
-        for i in range(0, self.hidden_size() - 1):
-
-            self.a[i + 1][:, 1:] = sigmoid(self.z[i])
-            self.z[i + 1] = np.dot(self.a[i + 1], np.transpose(self.theta(params, i + 1)))
-
-        self.a[end][:, 1:] = sigmoid(self.z[end - 1])
-        self.z[end] = np.dot(self.a[end], np.transpose(self.theta(params, end)))
-
-        self.h = sigmoid(self.z[end])
-
-        self.state = 1
 
     def cost_function(self, params, l=1.0):
         """ if set is specified use set"""
@@ -187,16 +188,19 @@ class Perceptron:
         #         temp[:, 0] = self.params[i][:, 0]
         #         self.g[i] += l * (self.params[i] - temp)
 
-
-    def predict(self, x):
+    def predict(self, x, params):
 
         t = x
-        for i in self.params:
-            t = sigmoid(add_bias(t).dot(np.transpose(i)))
+        for i in range(0, self.end()):
+            t = sigmoid(add_bias(t).dot(np.transpose(self.theta(params, i))))
         return t
 
-    def accuracy(self, set):
-        return np.mean(np.array_equal(self.predict(set[0]), set[1]))
+# a = np.argmax(mpl.h, axis=1) + 1
+# print(sum((MPL.hns(yl) == a).astype(float)))
+
+    def accuracy(self, h, y, mi=0):
+        a = np.argmax(h, axis=1) + mi
+        return 100.0 * np.sum((a == hns(y)).astype(float))/float(self.x.shape[0])
 
     def stochastic_gradient(self, set, alpha, batch):
 
@@ -220,21 +224,32 @@ class Perceptron:
 
             print(self.cost_function((x[h:k, :], y[h:k])))
 
-    def gradient_descent(self, alpha, max_ite):
+    def lbfgs(self):
+        """ solve using lbfgs low memory variation of BFGS"""
+        self.params = solver.fmin_l_bfgs_b(self.cost_function, self.params, self.gradient, disp=0, maxiter=100)[0]
 
-        # print(len(self.params))
-        # print(len(self.g))
-        old = self.cost_function()
+    def gradient_descent(self, alpha, l, max_ite=10000, tol=1e-5):
+
+        old = self.cost_function(self.params, l)
+
+        print('Ite \t Tol \t Cost')
 
         for i in range(0, max_ite):
-            for j in range(0, len(self.g)):
-                self.params[j] -= alpha * self.g[j]
 
-            new = self.cost_function()
-            print(new, new-old)
+            self.params -= alpha * self.gradient(self.params, l)
+
+            new = self.cost_function(self.params, l)
+            toltest = abs(new - old)/old
+
+            if toltest < tol:
+                print('SUCCESS')
+                break
+            else:
+                print(str(i) + '\t' + str(toltest) + '\t' + str(new))
             old = new
 
     def numerical_gradient(self, params, l=0, e=1e-4):
+        """ Compute the numerical gradient using finite difference (Central)"""
 
         grad = np.zeros_like(params)
         pertub = np.zeros_like(params)
@@ -274,8 +289,30 @@ class Perceptron:
 
         return self.x.shape[0]
 
+    def _forward_propagation(self, params):
+        """ forward prop is the common part between cost_function and gradient
+            the state variable makes sure we compute the forward prop before computing the gradient"""
+
+        end = self.end() - 1
+
+        self.a[0][:, 1:] = self.x
+        self.z[0] = np.dot(self.a[0], np.transpose(self.theta(params, 0)))
+
+        for i in range(0, self.hidden_size() - 1):
+
+            self.a[i + 1][:, 1:] = sigmoid(self.z[i])
+            self.z[i + 1] = np.dot(self.a[i + 1], np.transpose(self.theta(params, i + 1)))
+
+        self.a[end][:, 1:] = sigmoid(self.z[end - 1])
+        self.z[end] = np.dot(self.a[end], np.transpose(self.theta(params, end)))
+
+        self.h = sigmoid(self.z[end])
+
+        self.state = 1
+
     def _generate_size(self):
-        """ Generate the size of each set of params as a numpy shape tuple"""
+        """ Generate the size of each set of params as a numpy shape tuple
+            will be used as reference to cast the column vector params into multiples matrix"""
 
         size = list()
         # Input Layer
@@ -307,44 +344,11 @@ class Perceptron:
 
     def _generate_params(self):
         """allocate memory for params and initialize them with random numbers"""
-
         si = 0
 
+        # compute cumulative size
         for i in range(0, len(self.size)):
             si += self.size[i][0] * self.size[i][1]
             self.size[i] += (si, )
 
         return np.random.uniform(0, 1, si)
-
-
-if __name__ == "__main__":
-
-    y = np.array([0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3])
-    y = format_labels(y)
-
-    x = np.array([
-        [1, 20, 30, 40],
-        [1, 20, 30, 40],
-        [1, 20, 30, 40],
-        [1, 20, 30, 40],
-        [1, 20, 30, 40],
-        [1, 20, 30, 40],
-        [1, 20, 30, 40],
-        [1, 20, 30, 40],
-        [1, 20, 30, 40],
-        [1, 20, 30, 40],
-        [1, 20, 30, 40],
-        [1, 20, 30, 40]
-    ])
-
-    a = Perceptron(y, x, Options)
-
-    print(a.size)
-    print(a.params)
-    # print(a.theta(0))
-    print(a.theta(0).shape)
-    # print(a.theta(1))
-    print(a.theta(1).shape)
-
-
-    # print(a.a[0].shape)

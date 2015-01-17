@@ -6,6 +6,7 @@ import numpy as np
 
 # from load_data import load_data
 from cost_function import format_labels, Perceptron, add_bias
+import cost_function as MPL
 
 # structure of the NN
 Options = {
@@ -53,13 +54,13 @@ mpl.params[0:(si + 1) * sh] = t1.reshape(((si + 1) * sh,))
 mpl.params[(si + 1) * sh:(sh + 1) * so + (si + 1) * sh] = t2.reshape((so * (sh + 1),))
 
 # compute cost
-print('* Cost Function: ', mpl.cost_function(mpl.params, 0), 2.10095)
-print('Diff: ', mpl.cost_function(mpl.params, 0) - 2.10095)
+print('* Cost Function: ' + str(mpl.cost_function(mpl.params, 0)) + str(2.10095))
+print('Diff: ' + str(mpl.cost_function(mpl.params, 0) - 2.10095))
 print('')
 
 # compute regularized cost
-print('* Regularized Cost Function: ', mpl.cost_function(mpl.params, 10), 2.25231)
-print('Diff: ', mpl.cost_function(mpl.params, 10) - 2.25231)
+print('* Regularized Cost Function: ' + str(mpl.cost_function(mpl.params, 10)) + str(2.25231))
+print('Diff: ' + str(mpl.cost_function(mpl.params, 10) - 2.25231))
 print('')
 
 t1g = pd.read_csv('c:/class/test_data/t1g.csv', header=None).values
@@ -73,12 +74,13 @@ num = mpl.numerical_gradient(mpl.params, 0)
 gr = mpl.gradient(mpl.params, 10)
 numr = mpl.numerical_gradient(mpl.params, 10)
 
-grad = pd.DataFrame({'g': g, 'num': num, 'gr': gr, 'numr': numr})
+grad = pd.DataFrame({'ag': g, 'anum': num, 'bgr': gr, 'bnumr': numr})
 print(grad.head(10))
+
 print('')
-print('Difference Should be Small:')
-print(' Dif:', sum(grad['g'] - grad['num']))
-print('rDif:', sum(grad['gr'] - grad['numr']))
+print('* Difference Should be Small:')
+print(' Dif: ' + str(sum(grad['ag'] - grad['anum'])))
+print('rDif: ' + str(sum(grad['bgr'] - grad['bnumr'])))
 
 print('')
 print('=======================================================================')
@@ -87,7 +89,7 @@ print('=======================================================================')
 print('* Load data')
 
 x = pd.read_csv('c:/class/test_data/x.csv', header=None).values
-y = pd.read_csv('c:/class/test_data/y.csv', header=None).values
+yl = pd.read_csv('c:/class/test_data/y.csv', header=None).values
 t1 = pd.read_csv('c:/class/test_data/t1.csv', header=None).values
 t2 = pd.read_csv('c:/class/test_data/t2.csv', header=None).values
 
@@ -104,7 +106,7 @@ Options = {
 }
 
 # super-hot thing
-y = format_labels(np.transpose(y)[0])
+y = format_labels(np.transpose(yl)[0])
 
 # initialize the neural network with full data set
 mpl = Perceptron(y, x, Options)
@@ -113,27 +115,96 @@ si = Options['structure']['input']
 sh = Options['structure']['hidden'][0]
 so = Options['structure']['output']
 
-print('* Load weights')
-# set initial weight
-# mpl.params[0:(si + 1) * sh] = t1.reshape(((si + 1) * sh,))
-# mpl.params[(si + 1) * sh:(sh + 1) * so + (si + 1) * sh] = t2.reshape((so * (sh + 1),))
+print('Cost Function: ' + str(mpl.cost_function(mpl.params, 1)))
+print('')
 
-# # compute cost
-# print('* Cost Function: ', mpl.cost_function(mpl.params, 0), 0.287629)
-# print('Diff: ', mpl.cost_function(mpl.params, 0) - 0.287629)
+print('* Gradient Descent')
+mpl.gradient_descent(0.5, 1, 5)
+
+print('Accuracy : ' + str(mpl.accuracy(mpl.h, yl, 1)))
+
+print('')
+print('* LBFGS Optimization')
+mpl.lbfgs()
+
+print('Cost Function: ' + str(mpl.cost_function(mpl.params, 1)))
+print('Accuracy : ' + str(mpl.accuracy(mpl.h, yl, 1)))
+
+# print(yl.shape)
+# print(hns(yl).shape)
 # print('')
+# yl = np.transpose(yl)[0]
+# print(yl.shape)
+# print(hns(yl).shape)
+# print('')
+
+# a = np.argmax(mpl.h, axis=1) + 1
 #
-print('* Cost Function: ', mpl.cost_function(mpl.params, 1))
-print('')
+# print(sum((MPL.hns(yl) == a).astype(float)))
 
-print('LBFGS Optimization')
+# print(sum((MPL.predict_to_label(y) == a).astype(float)))
 
-import scipy.optimize as solver
-mpl.params = solver.fmin_l_bfgs_b(mpl.cost_function, mpl.params, mpl.gradient, disp=0, maxiter=100)[0]
 
-print('* Cost Function: ', mpl.cost_function(mpl.params, 1))
-print('')
+# p = np.argmax(mpl.h, axis=1) + 1
+# yl = np.transpose(yl)[0]
+# d = (p == yl).astype(int)
+#
+# print(d)
+# print(mpl.accuracy())
+# print(float(np.sum(d)) * 100.0/float(yl.shape[0]))
 
+
+# p = np.argmax(mpl.h, axis=1) + 1
+# print(p)
+
+# d = (p == yl).astype(int)
+#
+# print(d)
+# print('')
+# print(mpl.accuracy())
+# print(float(np.sum(d)) * 100.0/float(yl.shape[0]))
+
+# print(mpl.h.shape)
+# print(y.shape)
+#
+
+# def element_wise_equality(a, b):
+#
+#     c = np.zeros_like(a)
+#
+#     for i in range(0, len(a)):
+#         for j in range(0, len(i)):
+#
+#             if a[i, j] == b[i, j]:
+#                 c[i, j] = 1
+#     return c
+
+
+# def element_wise_equality(a, b):
+#
+#     c = np.zeros_like(a)
+#
+#     for i in range(0, len(a)):
+#
+#         if a[i] == b[i]:
+#             c[i] = 1
+#
+#     return c
+#
+# print(element_wise_equality(mpl.h, y))
+
+
+
+# t = np.equal(MPL.binarize(mpl.h), y)
+# print(mpl.h)
+# print(t)
+# print(t.astype(int))
+
+
+
+# print(pd.DataFrame(mpl.h))
+# print(pd.DataFrame(mpl.y))
+# print(pd.DataFrame(MPL.binarize(mpl.h)))
 
 # # compute cost with reg
 # print(str(mpl.cost_function(l=1))[0:8], 0.383770)
