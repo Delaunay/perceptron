@@ -18,7 +18,7 @@ Options = {
 
 
 def hns(n):
-    """ HNS function : Handle Numpy Shit function """
+    """ HNS function : Handle Numpy Shit"""
 
     if len(n.shape) != 1:
         if n.shape[0] != 1:
@@ -50,7 +50,7 @@ def binarize(h):
 
 
 def predict_to_label(h, mn=0):
-    """Re construct a labels"""
+    """ re construct a labels"""
     return np.argmax(h, axis=1) + mn
 
 
@@ -130,6 +130,23 @@ class Perceptron:
 
         return j + reg
 
+    # def usual_grad(self, params):
+    #     # forward prop must be done to compute the gradient
+    #     if self.state == 0:
+    #         self._forward_propagation(params)
+    #
+    #     end = self.end() - 1
+    #     self.g[end] = self.h - self.y
+    #
+    #     sig3 = self.h - self.y
+    #     sig2 = sig3.dot(self.theta(params, 1))[:, 1:] * sigmoid_grad(self.z[0])
+    #
+    #     self.grad[0:self.size[0][2]] = (np.transpose(sig2).dot(self.a[0])).reshape((self.size[0][2],))
+    #     self.grad[self.size[0][2]:self.size[1][2]] = (np.transpose(sig3).dot(self.a[1])).reshape((self.size[1][0] * self.size[1][1],))
+    #     self.state = 0
+    #     self.grad /= self.x.shape[0]
+    #     return self.grad
+
     def gradient(self, params, l=1.0):
 
         # forward prop must be done to compute the gradient
@@ -139,54 +156,36 @@ class Perceptron:
         end = self.end() - 1
         self.g[end] = self.h - self.y
 
-        sig3 = self.h - self.y
-        sig2 = sig3.dot(self.theta(params, 1))[:, 1:] * sigmoid_grad(self.z[0])
+        for i in range(end, 0, -1):
+            self.g[end - 1] = self.g[end].dot(self.theta(params, end))[:, 1:] * sigmoid_grad(self.z[end - 1])
 
-        if l < 0:
-            self.grad[0:self.size[0][2]] = (np.transpose(sig2).dot(self.a[0])).reshape((self.size[0][2],))
-            self.grad[self.size[0][2]:self.size[1][2]] = (np.transpose(sig3).dot(self.a[1])).reshape((self.size[1][0] * self.size[1][1],))
-            self.state = 0
-            self.grad /= self.x.shape[0]
-            return self.grad
+        # first layer
+        temp = np.zeros_like(self.theta(params, 0))
+        temp[:, 1:] = self.theta(params, 0)[:, 1:] * l
+        self.grad[0:self.size[0][2]] = (np.transpose(self.g[end - 1]).dot(self.a[0]) + temp).reshape((self.size[0][2],))
 
-        else:
-            temp = np.zeros_like(self.theta(params, 0))
-            temp[:, 1:] = self.theta(params, 0)[:, 1:] * l
-            self.grad[0:self.size[0][2]] = (np.transpose(sig2).dot(self.a[0]) + temp).reshape((self.size[0][2],))
-            temp = np.zeros_like(self.theta(params, 1))
-            temp[:, 1:] = self.theta(params, 1)[:, 1:] * l
-            self.grad[self.size[0][2]:self.size[1][2]] = (np.transpose(sig3).dot(self.a[1]) + temp).reshape((self.size[1][0] * self.size[1][1],))
+        # remaining layer
+        for i in range(1, end + 1):
+            temp = np.zeros_like(self.theta(params, i))
+            temp[:, 1:] = self.theta(params, i)[:, 1:] * l
 
-            self.state = 0
-            self.grad /= self.x.shape[0]
-            return self.grad
+            self.grad[self.size[i - 1][2]:self.size[i][2]] = \
+                (np.transpose(self.g[i]).dot(self.a[i]) + temp).reshape((self.size[i][0] * self.size[i][1],))
 
-        # self.grad[0:self.size[0][2]] = (np.transpose(sig2).dot(self.a[0])).reshape((self.size[0][2],))
-        #
+        # sig3 = self.h - self.y
+        # sig2 = sig3.dot(self.theta(params, 1))[:, 1:] * sigmoid_grad(self.z[0])
+
+        # temp = np.zeros_like(self.theta(params, 0))
+        # temp[:, 1:] = self.theta(params, 0)[:, 1:] * l
+        # self.grad[0:self.size[0][2]] = (np.transpose(sig2).dot(self.a[0]) + temp).reshape((self.size[0][2],))
         # temp = np.zeros_like(self.theta(params, 1))
-        # if l != 0:
-        #     temp[:, 1:] = self.theta(params, 1)[:, 1:] * l
-        #
-        # self.grad[self.size[0][2]:self.size[1][2]] = (np.transpose(sig3).dot(self.a[1])).reshape((self.size[1][0] * self.size[1][1],))
+        # temp[:, 1:] = self.theta(params, 1)[:, 1:] * l
+        # self.grad[self.size[0][2]:self.size[1][2]] = \
+        # (np.transpose(sig3).dot(self.a[1]) + temp).reshape((self.size[1][0] * self.size[1][1],))
 
-        # self.set_theta(self.grad, np.transpose(sig2).dot(self.a[0]), 0)
-        # self.set_theta(self.grad, np.transpose(sig3).dot(self.a[1]), 1)
-
-        # for i in range(1, end + 1):
-        #     self.g[end - i] = self.g[end - i + 1].dot(self.theta(params, end - i + 1))  # (5000x10 10x26)
-        #     self.g[end - i] = self.g[end - i][:, 1:] * sigmoid_grad(self.z[end - i])    # (5000x25 .* 5000x25)
-        #
-        # for i in range(0, end + 1):
-        #     self.set_theta(self.grad, np.transpose(self.g[i]).dot(self.a[i]), i)
-
-        # # regularization
-        # if l != 0:
-        #     for i in range(0, end):
-        #         # only copy the first Columns
-        #         # might be better than trying to 'delete' first column
-        #         temp = np.zeros_like(self.params[i])
-        #         temp[:, 0] = self.params[i][:, 0]
-        #         self.g[i] += l * (self.params[i] - temp)
+        self.state = 0
+        self.grad /= self.x.shape[0]
+        return self.grad
 
     def predict(self, x, params):
 
@@ -194,9 +193,6 @@ class Perceptron:
         for i in range(0, self.end()):
             t = sigmoid(add_bias(t).dot(np.transpose(self.theta(params, i))))
         return t
-
-# a = np.argmax(mpl.h, axis=1) + 1
-# print(sum((MPL.hns(yl) == a).astype(float)))
 
     def accuracy(self, h, y, mi=0):
         a = np.argmax(h, axis=1) + mi
@@ -212,10 +208,6 @@ class Perceptron:
         for i in range(0, sb):
             h = i * batch
             k = (i + 1) * batch
-
-            # print(x)
-            # print(x[h:k].shape)
-            # print(y[h:k].shape)
 
             self.gradient((x[h:k, :], y[h:k]))
 
