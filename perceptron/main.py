@@ -6,37 +6,14 @@ import numpy as np
 import timeit as tm
 
 # from load_data import load_data
-from cost_function import format_labels, Perceptron, add_bias
+from cost_function import format_labels, Perceptron
+from helpers import *
 
-
-# def shuffle(x, y):
-#
-#     bx = np.zeros_like(x)
-#     by = np.zeros_like(y)
-#     ck = {}
-#     idx = 0
-#
-#     for i in range(len(x)):
-#
-#         while True:
-#
-#             idx = np.random.uniform(0, len(x))
-#
-#             if idx not in ck:
-#                 ck[idx] = 1
-#                 break
-#
-#         ck[idx] = 1
-#
-#         bx[idx, :] = x[idx, :]
-#         by[idx, :] = y[idx, :]
-#
-#     return bx, by
-
-
+# run options
 file_option = {
-    'run_diag': True,
-    'run_real': True
+    'run_diag': False,
+    'run_real': True,
+    'run_stat': False
 }
 
 # Cut the training set into multiple set
@@ -45,7 +22,6 @@ file_option = {
 # see the effect of regularization
 
 if file_option['run_diag']:
-
     print('=======================================================================')
     print('                 Diagnostic                                            ')
     print('=======================================================================')
@@ -137,6 +113,8 @@ if file_option['run_real']:
     # super-hot thing
     y = format_labels(np.transpose(yl)[0])
 
+    x, y, yl = shuffle(x, y, yl)
+
     # structure of the NN
     Options = {
         "stochastic": False,
@@ -152,7 +130,7 @@ if file_option['run_real']:
     # initialize the neural network with full data set
     mpl = Perceptron(y, x, Options)
 
-    print('Neurons: ' + str(len(mpl.params)))
+    print('Params: ' + str(len(mpl.params)))
     print(mpl.size)
     print('')
 
@@ -173,14 +151,26 @@ if file_option['run_real']:
     print('Accuracy : ' + str(mpl.accuracy(mpl.h, yl, 1)))
     print('')
 
+    print('Mean: ' + str(np.mean(mpl.params)))
+    print('Sum : ' + str(np.sum(mpl.params)))
+    print('Norm: ' + str(np.linalg.norm(mpl.params)))
+    # print(pd.DataFrame(mpl.params))
+    print('')
+
+if file_option['run_stat']:
     print('=======================================================================')
     print('                 Statistics                                            ')
     print('=======================================================================')
+    print('* Load data')
 
     # Change number of Iteration
     # Change number of Hidden Layer
     # Change number of Layer Size
     # Change regularization
+
+    x = pd.read_csv('c:/class/test_data/x.csv', header=None).values
+    yl = pd.read_csv('c:/class/test_data/y.csv', header=None).values
+    y = format_labels(np.transpose(yl)[0])
 
     print('* Setting up environ')
 
@@ -196,11 +186,10 @@ if file_option['run_real']:
     for i in struct:
         Options["structure"]["hidden"] = i
         mpl = Perceptron(y, x, Options)
+        print('Params: ' + str(len(mpl.params)))
 
-        print(len(mpl.params))
-
-    for i in struct:
-        Options["structure"]["hidden"] = i
+    for j in struct:
+        Options["structure"]["hidden"] = j
 
         ite = 200
         size = 1000

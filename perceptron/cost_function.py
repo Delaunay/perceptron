@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 __author__ = 'Pierre Delaunay'
 
+from helpers import *
 import scipy.optimize as solver
 import numpy as np
 import copy
 
 Options = {
-    "stochastic": True,
+    "stochastic": False,
     "size": 100,
 
     "structure": {
@@ -15,51 +16,6 @@ Options = {
         "output": 10,
     }
 }
-
-
-def hns(n):
-    """ HNS function : Handle Numpy non-sens"""
-
-    if len(n.shape) != 1:
-        if n.shape[0] != 1:
-            n = np.transpose(n)
-
-        return n[0]
-
-    return n
-
-
-def sigmoid(x):
-    return 1.0 / (1.0 + np.exp(-x))
-
-
-def softmax(x):
-    x = np.exp(x)
-    return x / x.sum()
-
-
-def add_bias(x):
-    xp = np.ones((x.shape[0], x.shape[1] + 1))
-    xp[:, 1:] = x
-    return xp
-
-
-def sigmoid_grad(x):
-    s = sigmoid(x)
-    return s * (1.0 - s)
-
-
-def format_labels(y):
-    """ Takes a vector Y containing multiple labels and return
-    one matrix containing one labels per column handles class for [0:n] or to [1:n]"""
-
-    n = np.min(y)
-    yy = np.zeros((y.shape[0], np.max(y) - n + 1), dtype=np.float32)
-
-    for i, label in enumerate(y):
-        yy[i, label - n] = 1
-
-    return yy
 
 
 class Perceptron:
@@ -71,13 +27,32 @@ class Perceptron:
         self.option = option
         self.size = self._generate_size()       # Matrix Size So people can see the NN structure
                                                 # [0] : rows [1] : cols [2]: cumulative size (to reshape the col)
-
         self.y = y      # labels
         self.x = x      # data
 
         # Should I handle the case where x cols =/= input ?
-        # Current - No: user may have forgotten bias unit
-        # self.structure['input'] = x.shape[1]
+        if self.structure['input'] != self.x.shape[1]:
+            print('WRN >> input size != x cols')
+            print('     Have you added an unnecessary bias unit ?')
+            print('     The bias unit is implicitly added')
+            print('------|>> Error Fixed')
+
+            self.structure['input'] = self.x.shape[1]
+
+        if self.structure['output'] != self.y.shape[1]:
+            print('WRN >> output size != y cols')
+            print('     Have you forgotten to format the labels ?')
+            print('     y cols = output size = number of class')
+            print('     * Checking y validity')
+
+            if np.max(self.y) > 1:
+                print('     => y is not a valid Matrix')
+                print('     trying to transform y into a valid format')
+                self.y = format_labels(self.y)
+
+            print('------|>> Error Fixed')
+
+            self.structure['output'] = y.shape[1]
 
         # save result of each layer || needed for the gradient
         self.a = []     # save feature matrix of each layer [1 X]
@@ -132,6 +107,7 @@ class Perceptron:
         end = self.end() - 1
         self.g[end] = self.h - self.y
 
+        # backward prop in itself
         for i in range(end, 0, -1):
             self.g[i - 1] = self.g[i].dot(self.theta(params, i))[:, 1:] * sigmoid_grad(self.z[i - 1])
 
@@ -168,24 +144,31 @@ class Perceptron:
         self.l = reg
         self.params = solver.fmin_l_bfgs_b(self.cost_function, self.params, self.gradient, disp=0, maxiter=max_ite)[0]
 
-    def gradient_descent(self, alpha, l, max_ite=10000, tol=1e-5):
+    def gradient_descent(self, alpha=1.0, l=1.0, max_ite=10000, tol=1e-5):
 
+        # add line search for the alpha
         old = self.cost_function(self.params, l)
+        fn = lambda xx: self.cost_function(self.params - xx * self.grad)
 
-        print('Ite \t Tol \t Cost')
+        print('Ite \t Tol \t Cost \t alpha')
 
         for i in range(0, max_ite):
 
-            self.params -= alpha * self.gradient(self.params, l)
+            # recompute the grad
+            self.gradient(self.params, l)
+
+            # find the best alpha using linear approximation
+            alpha = line_search(fn)
+            self.params -= alpha * self.grad
 
             new = self.cost_function(self.params, l)
-            toltest = abs(new - old)/old
+            toltest = (new - old)/old
 
-            if toltest < tol:
+            if abs(toltest) < tol:
                 print('SUCCESS')
                 break
             else:
-                print(str(i) + '\t' + str(toltest) + '\t' + str(new))
+                print(str(i) + '\t' + str(toltest) + '\t' + str(new) + '\t' + str(alpha))
             old = new
 
     def numerical_gradient(self, params, l=0, e=1e-4):
@@ -205,6 +188,7 @@ class Perceptron:
 
         return grad
 
+    # Accessor | Shortcut
     def end(self):
         return self.hidden_size() + 1
 
@@ -229,6 +213,7 @@ class Perceptron:
 
         return self.x.shape[0]
 
+    # private methods
     def _forward_propagation(self, params):
         """ forward prop is the common part between cost_function and gradient
             the state variable makes sure we compute the forward prop before computing the gradient"""
@@ -292,5 +277,3 @@ class Perceptron:
             self.size[i] += (si, )
 
         return np.random.uniform(0, 1, si)
-
-
