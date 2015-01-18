@@ -31,5 +31,6 @@ Makefile*
 /old/
 /build/
 /.idea/
+/gen/
 
 *.jpg

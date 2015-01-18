@@ -18,7 +18,7 @@ Options = {
 
 
 def hns(n):
-    """ HNS function : Handle Numpy Shit"""
+    """ HNS function : Handle Numpy non-sens"""
 
     if len(n.shape) != 1:
         if n.shape[0] != 1:
@@ -42,16 +42,6 @@ def add_bias(x):
     xp = np.ones((x.shape[0], x.shape[1] + 1))
     xp[:, 1:] = x
     return xp
-
-
-def binarize(h):
-    """ max => 1 everything else = 0 """
-    return format_labels(predict_to_label(h))
-
-
-def predict_to_label(h, mn=0):
-    """ re construct a labels"""
-    return np.argmax(h, axis=1) + mn
 
 
 def sigmoid_grad(x):
@@ -102,6 +92,7 @@ class Perceptron:
         self.grad = copy.deepcopy(self.params)  # grad
         self._allocate_memory()                 # allocate h, z, and a
 
+        self.l = 1.0
         self.state = 0
 
     def theta(self, params, k):
@@ -117,6 +108,7 @@ class Perceptron:
 
         # always compute the forward prop
         self._forward_propagation(params)
+        l = self.l
         reg = 0
 
         # compute reg
@@ -130,25 +122,9 @@ class Perceptron:
 
         return j + reg
 
-    # def usual_grad(self, params):
-    #     # forward prop must be done to compute the gradient
-    #     if self.state == 0:
-    #         self._forward_propagation(params)
-    #
-    #     end = self.end() - 1
-    #     self.g[end] = self.h - self.y
-    #
-    #     sig3 = self.h - self.y
-    #     sig2 = sig3.dot(self.theta(params, 1))[:, 1:] * sigmoid_grad(self.z[0])
-    #
-    #     self.grad[0:self.size[0][2]] = (np.transpose(sig2).dot(self.a[0])).reshape((self.size[0][2],))
-    #     self.grad[self.size[0][2]:self.size[1][2]] = (np.transpose(sig3).dot(self.a[1])).reshape((self.size[1][0] * self.size[1][1],))
-    #     self.state = 0
-    #     self.grad /= self.x.shape[0]
-    #     return self.grad
-
     def gradient(self, params, l=1.0):
 
+        l = self.l
         # forward prop must be done to compute the gradient
         if self.state == 0:
             self._forward_propagation(params)
@@ -157,31 +133,20 @@ class Perceptron:
         self.g[end] = self.h - self.y
 
         for i in range(end, 0, -1):
-            self.g[end - 1] = self.g[end].dot(self.theta(params, end))[:, 1:] * sigmoid_grad(self.z[end - 1])
+            self.g[i - 1] = self.g[i].dot(self.theta(params, i))[:, 1:] * sigmoid_grad(self.z[i - 1])
 
         # first layer
         temp = np.zeros_like(self.theta(params, 0))
         temp[:, 1:] = self.theta(params, 0)[:, 1:] * l
-        self.grad[0:self.size[0][2]] = (np.transpose(self.g[end - 1]).dot(self.a[0]) + temp).reshape((self.size[0][2],))
+        self.grad[0:self.size[0][2]] = (np.transpose(self.g[0]).dot(self.a[0]) + temp).reshape((self.size[0][2],))
 
-        # remaining layer
+        # remaining layers
         for i in range(1, end + 1):
             temp = np.zeros_like(self.theta(params, i))
             temp[:, 1:] = self.theta(params, i)[:, 1:] * l
 
             self.grad[self.size[i - 1][2]:self.size[i][2]] = \
                 (np.transpose(self.g[i]).dot(self.a[i]) + temp).reshape((self.size[i][0] * self.size[i][1],))
-
-        # sig3 = self.h - self.y
-        # sig2 = sig3.dot(self.theta(params, 1))[:, 1:] * sigmoid_grad(self.z[0])
-
-        # temp = np.zeros_like(self.theta(params, 0))
-        # temp[:, 1:] = self.theta(params, 0)[:, 1:] * l
-        # self.grad[0:self.size[0][2]] = (np.transpose(sig2).dot(self.a[0]) + temp).reshape((self.size[0][2],))
-        # temp = np.zeros_like(self.theta(params, 1))
-        # temp[:, 1:] = self.theta(params, 1)[:, 1:] * l
-        # self.grad[self.size[0][2]:self.size[1][2]] = \
-        # (np.transpose(sig3).dot(self.a[1]) + temp).reshape((self.size[1][0] * self.size[1][1],))
 
         self.state = 0
         self.grad /= self.x.shape[0]
@@ -198,27 +163,10 @@ class Perceptron:
         a = np.argmax(h, axis=1) + mi
         return 100.0 * np.sum((a == hns(y)).astype(float))/float(self.x.shape[0])
 
-    def stochastic_gradient(self, set, alpha, batch):
-
-        x = set[0]
-        y = set[1]
-
-        sb = x.shape[0] / batch
-
-        for i in range(0, sb):
-            h = i * batch
-            k = (i + 1) * batch
-
-            self.gradient((x[h:k, :], y[h:k]))
-
-            for j in range(0, len(self.g)):
-                self.params[j] -= alpha * self.g[j]
-
-            print(self.cost_function((x[h:k, :], y[h:k])))
-
-    def lbfgs(self):
+    def lbfgs(self, max_ite=100, reg=1):
         """ solve using lbfgs low memory variation of BFGS"""
-        self.params = solver.fmin_l_bfgs_b(self.cost_function, self.params, self.gradient, disp=0, maxiter=100)[0]
+        self.l = reg
+        self.params = solver.fmin_l_bfgs_b(self.cost_function, self.params, self.gradient, disp=0, maxiter=max_ite)[0]
 
     def gradient_descent(self, alpha, l, max_ite=10000, tol=1e-5):
 
@@ -344,3 +292,5 @@ class Perceptron:
             self.size[i] += (si, )
 
         return np.random.uniform(0, 1, si)
+
+
