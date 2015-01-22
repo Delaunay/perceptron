@@ -7,20 +7,33 @@ import numpy as np
 import copy
 
 Options = {
-    "stochastic": False,
-    "size": 100,
+    # Optimization
+    'stochastic': False,
+    'size': 100,
 
-    "structure": {
-        "input": 400,
-        "hidden": [25],
-        "output": 10,
+    # overfitting
+    'early_stopping': True,
+    'regularization': 1.0,
+
+    # NN Structure
+    'structure': {
+        'input': 400,
+        'hidden': [25],
+        'output': 10,
     }
 }
 
 
 class Perceptron:
 
-    def __init__(self, y, x, option):
+    def __init__(self, y, x, option, cy=None, cx=None):
+        """
+        :param y: Training labels
+        :param x: Training feature
+        :param option: perceptron option
+        :param cy: Cross Validation Labels (default None)
+        :param cx: Cross Validation Labels (default None)
+        """
 
         # structure
         self.structure = option['structure']
@@ -29,6 +42,8 @@ class Perceptron:
                                                 # [0] : rows [1] : cols [2]: cumulative size (to reshape the col)
         self.y = y      # labels
         self.x = x      # data
+        self.cy = cy
+        self.cx = cx
 
         # Should I handle the case where x cols =/= input ?
         if self.structure['input'] != self.x.shape[1]:
@@ -49,6 +64,10 @@ class Perceptron:
                 print('     => y is not a valid Matrix')
                 print('     trying to transform y into a valid format')
                 self.y = format_labels(self.y)
+
+                # same error must have been made for the cv test
+                if self.cy is not None and np.max(self.y) > 1:
+                    self.cy = format_labels(self.cy)
 
             print('------|>> Error Fixed')
 
@@ -78,15 +97,14 @@ class Perceptron:
         else:
             return (params[self.size[k - 1][2]:self.size[k][2]]).reshape(self.size[k][0:2])
 
-    def cost_function(self, params, l=1.0):
-        """ if set is specified use set"""
+    def cost_function(self, params):
 
         # always compute the forward prop
         self._forward_propagation(params)
-        l = self.l
-        reg = 0
 
         # compute reg
+        l = self.regularization()
+        reg = 0
         if l != 0:
             for i in range(0, self.end()):
                 reg += np.sum(self.theta(params, i)[:, 1:] ** 2)
@@ -94,12 +112,13 @@ class Perceptron:
             reg = reg * l / (2.0 * self.train_size())
 
         j = - (np.sum(np.log(self.h) * self.y) + np.sum(np.log(1.0 - self.h) * (1.0 - self.y))) / self.x.shape[0]
-
         return j + reg
 
-    def gradient(self, params, l=1.0):
+    def gradient(self, params):
+        """ bug when lambda = 0"""
 
-        l = self.l
+        l = self.regularization()
+
         # forward prop must be done to compute the gradient
         if self.state == 0:
             self._forward_propagation(params)
@@ -139,29 +158,28 @@ class Perceptron:
         a = np.argmax(h, axis=1) + mi
         return 100.0 * np.sum((a == hns(y)).astype(float))/float(self.x.shape[0])
 
-    def lbfgs(self, max_ite=100, reg=1):
+    def lbfgs(self, max_ite=100):
         """ solve using lbfgs low memory variation of BFGS"""
-        self.l = reg
+        self.l = self.regularization()
         self.params = solver.fmin_l_bfgs_b(self.cost_function, self.params, self.gradient, disp=0, maxiter=max_ite)[0]
 
-    def gradient_descent(self, alpha=1.0, l=1.0, max_ite=10000, tol=1e-5):
+    def gradient_descent(self, max_ite=10000, tol=1e-5):
 
         # add line search for the alpha
-        old = self.cost_function(self.params, l)
+        old = self.cost_function(self.params)
         fn = lambda xx: self.cost_function(self.params - xx * self.grad)
 
         print('Ite \t Tol \t Cost \t alpha')
 
         for i in range(0, max_ite):
-
             # recompute the grad
-            self.gradient(self.params, l)
+            self.gradient(self.params)
 
             # find the best alpha using linear approximation
             alpha = line_search(fn)
             self.params -= alpha * self.grad
 
-            new = self.cost_function(self.params, l)
+            new = self.cost_function(self.params)
             toltest = (new - old)/old
 
             if abs(toltest) < tol:
@@ -171,8 +189,8 @@ class Perceptron:
                 print(str(i) + '\t' + str(toltest) + '\t' + str(new) + '\t' + str(alpha))
             old = new
 
-    def numerical_gradient(self, params, l=0, e=1e-4):
-        """ Compute the numerical gradient using finite difference (Central)"""
+    def numerical_gradient(self, params, e=1e-4):
+        """ Compute the numerical gradient using finite difference (Central) """
 
         grad = np.zeros_like(params)
         pertub = np.zeros_like(params)
@@ -180,8 +198,8 @@ class Perceptron:
         for i in range(0, len(params)):
             pertub[i] = e
 
-            loss1 = self.cost_function(params - pertub, l)
-            loss2 = self.cost_function(params + pertub, l)
+            loss1 = self.cost_function(params - pertub)
+            loss2 = self.cost_function(params + pertub)
 
             grad[i] = (loss2 - loss1) / (2.0 * e)
             pertub[i] = 0
@@ -189,6 +207,18 @@ class Perceptron:
         return grad
 
     # Accessor | Shortcut
+    def stochastic(self):
+        return self.option['stochastic']
+
+    def early_stopping(self):
+        return self.option['early_stopping']
+
+    def regularization(self):
+        return self.option['regularization']
+
+    def lmbda(self):
+        return self.option['regularization']
+
     def end(self):
         return self.hidden_size() + 1
 

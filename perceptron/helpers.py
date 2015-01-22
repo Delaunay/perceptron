@@ -57,6 +57,7 @@ def line_search(f):
     return - x[1, 0] / (2.0 * x[0, 0])
 
     # # 2 Linear Approximation:
+    # always find 0.5 => borinnnnnnnng
     # x1 = 0.0
     # x2 = 0.25
     # fx1 = f(x1)

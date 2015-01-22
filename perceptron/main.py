@@ -2,11 +2,11 @@
 __author__ = 'Pierre Delaunay'
 
 import pandas as pd
-import numpy as np
+# import numpy as np
 import timeit as tm
 
 # from load_data import load_data
-from cost_function import format_labels, Perceptron
+from cost_function import Perceptron
 from helpers import *
 
 # run options
@@ -28,13 +28,18 @@ if file_option['run_diag']:
 
     # structure of the NN
     Options = {
-        "stochastic": False,
-        "size": 100,
+        # Optimization
+        'stochastic': False,
+        'size': 100,
 
-        "structure": {
-            "input": 3,
-            "hidden": [5],
-            "output": 3,
+        # overfitting
+        'early_stopping': True,
+        'regularization': 0.0,
+
+        'structure': {
+            'input': 3,
+            'hidden': [5],
+            'output': 3,
         }
     }
 
@@ -69,28 +74,24 @@ if file_option['run_diag']:
     # mpl.params[0:(si + 1) * sh] = t1.reshape(((si + 1) * sh,))
     # mpl.params[(si + 1) * sh:(sh + 1) * so + (si + 1) * sh] = t2.reshape((so * (sh + 1),))
 
-    mpl.l = 0
     # compute cost
-    print('* Cost Function: ' + str(mpl.cost_function(mpl.params, 0)) + ' ' + str(2.10095))
-    print('Diff: ' + str(mpl.cost_function(mpl.params, 0) - 2.10095))
+    print('* Cost Function: ' + str(mpl.cost_function(mpl.params)) + ' ' + str(2.10095))
+    print('Diff: ' + str(mpl.cost_function(mpl.params) - 2.10095))
     print('')
 
-    mpl.l = 10
     # compute regularized cost
-    print('* Regularized Cost Function: ' + str(mpl.cost_function(mpl.params, 10)) + ' ' + str(2.25231))
-    print('Diff: ' + str(mpl.cost_function(mpl.params, 10) - 2.25231))
+    print('* Regularized Cost Function: ' + str(mpl.cost_function(mpl.params)) + ' ' + str(2.25231))
+    print('Diff: ' + str(mpl.cost_function(mpl.params) - 2.25231))
     print('')
 
     print('* Gradient Checking')
 
     # g = mpl.usual_grad(mpl.params)  # mpl.gradient(mpl.params, 0)
-    mpl.l = 0
-    g = mpl.gradient(mpl.params, 0)
-    num = mpl.numerical_gradient(mpl.params, 0)
+    g = mpl.gradient(mpl.params)
+    num = mpl.numerical_gradient(mpl.params)
 
-    mpl.l = 10
-    gr = mpl.gradient(mpl.params, 10)
-    numr = mpl.numerical_gradient(mpl.params, 10)
+    gr = mpl.gradient(mpl.params)
+    numr = mpl.numerical_gradient(mpl.params)
 
     grad = pd.DataFrame({'ag': g, 'anum': num, 'bgr': gr, 'bnumr': numr})
     print(grad.head(10))
@@ -117,13 +118,13 @@ if file_option['run_real']:
 
     # structure of the NN
     Options = {
-        "stochastic": False,
-        "size": 100,
+        'stochastic': False,
+        'size': 100,
 
-        "structure": {
-            "input": 400,
-            "hidden": [25],
-            "output": 10,
+        'structure': {
+            'input': 400,
+            'hidden': [25],
+            'output': 10,
         }
     }
 
@@ -134,12 +135,12 @@ if file_option['run_real']:
     print(mpl.size)
     print('')
 
-    print('Cost Function: ' + str(mpl.cost_function(mpl.params, 1)))
+    print('Cost Function: ' + str(mpl.cost_function(mpl.params)))
     print('Accuracy : ' + str(mpl.accuracy(mpl.h, yl, 1)))
     print('')
 
     print('* Gradient Descent')
-    mpl.gradient_descent(0.5, 1, 5)
+    mpl.gradient_descent(10)
 
     print('Accuracy : ' + str(mpl.accuracy(mpl.h, yl, 1)))
 
@@ -147,7 +148,7 @@ if file_option['run_real']:
     print('* LBFGS Optimization')
     mpl.lbfgs(150)
 
-    print('Cost Function: ' + str(mpl.cost_function(mpl.params, 1)))
+    print('Cost Function: ' + str(mpl.cost_function(mpl.params)))
     print('Accuracy : ' + str(mpl.accuracy(mpl.h, yl, 1)))
     print('')
 
@@ -184,12 +185,12 @@ if file_option['run_stat']:
     ]
 
     for i in struct:
-        Options["structure"]["hidden"] = i
+        Options['structure']['hidden'] = i
         mpl = Perceptron(y, x, Options)
         print('Params: ' + str(len(mpl.params)))
 
     for j in struct:
-        Options["structure"]["hidden"] = j
+        Options['structure']['hidden'] = j
 
         ite = 200
         size = 1000
@@ -213,10 +214,10 @@ if file_option['run_stat']:
         for i in range(0, size):
             mpl = Perceptron(y, x, Options)
 
-            lb = lambda: mpl.lbfgs(ite, reg)
+            lb = lambda: mpl.lbfgs(ite)
             time = tm.timeit(lb, number=1)
 
-            cost_hist.append([mpl.cost_function(mpl.params, reg),
+            cost_hist.append([mpl.cost_function(mpl.params),
                               mpl.accuracy(mpl.h, yl, 1)])
 
             params_hist.append(mpl.params)
