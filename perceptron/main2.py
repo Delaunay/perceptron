@@ -32,10 +32,12 @@ valid_set = {
     'yl': yl[tsize:, :]
 }
 
+# training set
 tsyl = pd.DataFrame({
     'yl': hns(train_set['yl'])
 })
 
+# validation
 vsyl = pd.DataFrame({
     'yl': hns(valid_set['yl'])
 })
@@ -44,16 +46,18 @@ ts_rep = {}
 vs_rep = {}
 
 print(str('') + '\t' + str('Train') + '\t' + str('Valid'))
-print(str(tsize) + '\t' + str(vsize))
+print('\t' + str(tsize) + '\t' + str(vsize))
 
+# we count the number of number present
+# we would not want to train a perceptron to recognize only one number
 for i in range(1, 10):
     ts_rep[i] = ((tsyl['yl'] == i).sum() * 100/tsize)
     vs_rep[i] = ((vsyl['yl'] == i).sum() * 100/vsize)
 
-    print(str(i) + '\t' + str(ts_rep[i]) + '\t' + str(vs_rep[i]))
+    print(str(i) + '\t' + str(ts_rep[i]) + '\t\t' + str(vs_rep[i]))
 
 
-test = 10
+test = 5
 
 # reg factor
 reg_table = [
@@ -73,18 +77,20 @@ ite_table = [
 
 # Struct to test
 struct = [
-    # [15],
-    # [40],
-    # [25],
-    # [15, 15],
+    [15],
+    [25],
+    [40],
+    [15, 15],
     [25, 15],
-    # [40, 15]
+    [40, 15]
 ]
 
 # structure of the NN
 Options = {
     "stochastic": False,
     "size": 100,
+
+    'regularization': 1.0,
 
     "structure": {
         "input": 400,
@@ -95,27 +101,34 @@ Options = {
 
 print('')
 
+
+      #0	0.3155	99.87	23.8	48.38	11.42
 for s in struct:
 
     Options["structure"]["hidden"] = s
-    reg = 1.0     # reg_table[1]
+    Options['regularization'] = 1.0
     info = str()
+
+    tp = Perceptron(train_set['y'], train_set['x'], Options)
+
+    print('\nStructure: ' + str(s) + '\tparams: ' + str(len(tp.params)))
+    print('idx   cost    acc    acc     norm    time')
+    print('-----------------------------------------')
 
     for i in range(0, test):
 
         mpl = Perceptron(train_set['y'], train_set['x'], Options)
-        mpl.l = reg
         lb = lambda: mpl.lbfgs(ite_table[3])
         time = tm.timeit(lb, number=1)
 
         h1 = mpl.predict(train_set['x'], mpl.params)
         h2 = mpl.predict(valid_set['x'], mpl.params)
 
-        info = str(i) + ', ' + \
-               str(mpl.cost_function(mpl.params)) + ', ' +\
-               str(mpl.accuracy(h1, train_set['yl'], 1)) + ', ' +\
-               str(mpl.accuracy(h2, valid_set['yl'], 1)) + ', ' +\
-               str(np.linalg.norm(mpl.params)) + ', ' +\
-               str(time) + str('\n')
+        info = str(i) + '\t' + \
+               str(mpl.cost_function(mpl.params))[0:6] + '\t' +\
+               str(mpl.accuracy(h1, train_set['yl'], 1))[0:5] + '\t' +\
+               str(mpl.accuracy(h2, valid_set['yl'], 1))[0:5] + '\t' +\
+               str(np.linalg.norm(mpl.params))[0:5] + '\t' +\
+               str(time)[0:5] + str('')
 
         print(info)
